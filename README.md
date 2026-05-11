@@ -1,36 +1,61 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Enerlytics ⚡
+### AI-Powered Electricity Forecasting & Bill Optimization
 
-## Getting Started
+Enerlytics is a smart electricity management platform designed to help K-Electric consumers predict their monthly consumption and optimize their usage to stay within lower billing slabs. It combines deep learning forecasting models with a rule-based recommendation engine to provide actionable insights.
 
-First, run the development server:
+---
 
+## 🌟 Key Features
+
+### 1. **Ensemble AI Forecasting**
+Our system uses a sophisticated ensemble of two deep learning models to predict next month's consumption:
+*   **LSTM (Long Short-Term Memory):** Captures seasonal trends and historical patterns.
+*   **TFT (Temporal Fusion Transformer):** Handles complex time-series data with attention mechanisms for high precision.
+*   **Synthetic Data Generation:** Generates realistic hourly usage data based on Karachi's weather patterns to train models effectively.
+
+### 2. **Smart Recommendation Engine**
+A rule-based intelligence layer that triggers when you are projected to cross a **K-Electric Slab Boundary** (e.g., 200 or 300 units).
+*   **Slab Awareness:** Calculates exact unit reductions needed to stay in a lower price bracket.
+*   **Peak-Hour Shifting:** Identifies opportunities to shift high-load appliances (like washing machines and irons) away from peak hours (5 PM – 11 PM).
+*   **Appliance Wattage Analysis:** Provides prioritized tips based on standard wattage profiles for common Pakistani household appliances.
+
+### 3. **Automated Bill Scraping**
+*   **Playwright Scraper:** Automatically fetches duplicate bills from the K-Electric portal.
+*   **PDF Extractor:** Parses billing data directly from PDFs to build a persistent historical database in **Supabase**.
+
+---
+
+## 🛠️ Tech Stack
+
+*   **Frontend:** [Next.js](https://nextjs.org/) (React), Tailwind CSS, Framer Motion, Lucide Icons.
+*   **Backend:** [FastAPI](https://fastapi.tiangolo.com/) (Python).
+*   **Database & Auth:** [Supabase](https://supabase.com/).
+*   **Machine Learning:** TensorFlow, PyTorch, PyTorch Forecasting.
+*   **Automation:** Playwright (Node.js).
+
+---
+
+## 🚀 Getting Started
+
+### 1. Prerequisites
+*   Node.js (v18+)
+*   Python (v3.9+)
+*   Supabase Account
+
+### 2. Installation
+
+**Clone the repository:**
 ```bash
+git clone https://github.com/Ibrahim-ahmed05/Enerlytics.git
+cd Enerlytics
+
+
+npm install
+cp .env.example .env
+# Fill in your Supabase URL and Anon Key in .env
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
-
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+cd backend
+pip install -r requirements.txt
+# Ensure ML models (.h5 and .ckpt) are in the backend directory
+uvicorn main:app --reload
