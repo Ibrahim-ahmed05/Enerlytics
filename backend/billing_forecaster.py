@@ -181,6 +181,7 @@ class Forecaster:
 
     def _load_models(self):
         # Load LSTM
+        if all(os.path.exists(p) for p in [self.lstm_model_path, self.feat_scaler_path, self.tgt_scaler_path]):
             try:
                 # Add DTypePolicy to custom_objects for Keras 3
                 try:
@@ -204,8 +205,6 @@ class Forecaster:
             except Exception as e:
                 print(f"Error loading LSTM model: {e}")
 
-
-
         # Load TFT
         if os.path.exists(self.tft_ckpt_path):
             try:
@@ -227,12 +226,12 @@ class Forecaster:
                             hp.pop(key)
                     torch.save(raw_ckpt, self.tft_patched_path)
 
-                
                 self.tft_model = TemporalFusionTransformer.load_from_checkpoint(self.tft_patched_path, weights_only=False)
                 self.tft_model.eval()
                 print("TFT model loaded successfully.")
             except Exception as e:
                 print(f"Error loading TFT model: {e}")
+
 
     def run_lstm_forecast(self, df, steps=720):
         if self.lstm_model is None or self.feature_scaler is None or self.target_scaler is None:
