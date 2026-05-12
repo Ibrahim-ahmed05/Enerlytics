@@ -165,7 +165,9 @@ class Forecaster:
         
         # TFT Artifacts
         self.tft_ckpt_path = os.path.join(self.backend_dir, 'tft_model_checkpoint.ckpt')
-        self.tft_patched_path = os.path.join(self.backend_dir, 'tft_model_checkpoint_patched.ckpt')
+        # Use a unique name for the new patch to force re-patching
+        self.tft_patched_path = os.path.join(self.backend_dir, 'tft_model_checkpoint_v2.ckpt')
+
 
         self.lstm_model = None
         self.feature_scaler = None
@@ -179,10 +181,18 @@ class Forecaster:
 
     def _load_models(self):
         # Load LSTM
-        if all(os.path.exists(p) for p in [self.lstm_model_path, self.feat_scaler_path, self.tgt_scaler_path]):
             try:
-                # Use custom_objects to handle the batch_shape error in Keras 3
-                custom_objects = {'InputLayer': PatchedInputLayer}
+                # Add DTypePolicy to custom_objects for Keras 3
+                try:
+                    from tensorflow.keras.mixed_precision import Policy as DTypePolicy
+                except ImportError:
+                    DTypePolicy = None
+
+                custom_objects = {
+                    'InputLayer': PatchedInputLayer,
+                    'DTypePolicy': DTypePolicy
+                }
+                
                 self.lstm_model = tf.keras.models.load_model(
                     self.lstm_model_path, 
                     compile=False, 
@@ -193,6 +203,7 @@ class Forecaster:
                 print("LSTM model and scalers loaded successfully.")
             except Exception as e:
                 print(f"Error loading LSTM model: {e}")
+
 
 
         # Load TFT
