@@ -10,23 +10,8 @@ import joblib
 import warnings
 warnings.filterwarnings('ignore')
 
-# ML Imports (Will fail gracefully if not installed)
-try:
-    import tensorflow as tf
-    # Fix for Keras 3 batch_shape error
-    from tensorflow.keras.layers import InputLayer as KerasInputLayer
-    class PatchedInputLayer(KerasInputLayer):
-        def __init__(self, *args, **kwargs):
-            kwargs.pop('batch_shape', None)
-            super().__init__(*args, **kwargs)
-
-    import torch
-    from pytorch_forecasting import TemporalFusionTransformer, TimeSeriesDataSet
-    from pytorch_forecasting.data import GroupNormalizer
-    from pytorch_forecasting.data.encoders import NaNLabelEncoder
-    ML_AVAILABLE = True
-except ImportError:
-    ML_AVAILABLE = False
+# ML Imports (Will be loaded lazily to prevent hangs)
+ML_AVAILABLE = True # Assume true, will check during lazy load
 
 
 
@@ -174,19 +159,42 @@ class Forecaster:
         self.target_scaler = None
         self.tft_model = None
 
-        if ML_AVAILABLE:
-            self._load_models()
-        
         self._initialized = True
 
+    def _ensure_models_loaded(self):
+        if self.lstm_model is None and self.tft_model is None and ML_AVAILABLE:
+            self._load_models()
+
+
     def _load_models(self):
+        global ML_AVAILABLE
+        # Load ML Libraries lazily
+        try:
+            import tensorflow as tf
+            from tensorflow.keras.layers import InputLayer as KerasInputLayer
+            
+            # Define PatchedInputLayer here for Keras 3 compatibility
+            class PatchedInputLayer(KerasInputLayer):
+                def __init__(self, *args, **kwargs):
+                    kwargs.pop('batch_shape', None)
+                    super().__init__(*args, **kwargs)
+
+            import torch
+            from pytorch_forecasting import TemporalFusionTransformer, TimeSeriesDataSet
+            from pytorch_forecasting.data import GroupNormalizer
+            from pytorch_forecasting.data.encoders import NaNLabelEncoder
+        except ImportError as e:
+            print(f"ML libraries not found, using fallback: {e}")
+            ML_AVAILABLE = False
+            return
+
         # Load LSTM
         if all(os.path.exists(p) for p in [self.lstm_model_path, self.feat_scaler_path, self.tgt_scaler_path]):
             try:
                 # Add DTypePolicy to custom_objects for Keras 3
                 try:
                     from tensorflow.keras.mixed_precision import Policy as DTypePolicy
-                except ImportError:
+                except (ImportError, AttributeError):
                     DTypePolicy = None
 
                 custom_objects = {
@@ -204,6 +212,7 @@ class Forecaster:
                 print("LSTM model and scalers loaded successfully.")
             except Exception as e:
                 print(f"Error loading LSTM model: {e}")
+
 
         # Load TFT
         if os.path.exists(self.tft_ckpt_path):
@@ -234,7 +243,9 @@ class Forecaster:
 
 
     def run_lstm_forecast(self, df, steps=720):
+        self._ensure_models_loaded()
         if self.lstm_model is None or self.feature_scaler is None or self.target_scaler is None:
+
             raise FileNotFoundError("LSTM model or scalers not loaded.")
 
         df_feat = df.copy()
@@ -280,7 +291,9 @@ class Forecaster:
         return max(0, predicted_monthly_total)
 
     def run_tft_forecast(self, df, steps=720):
+        self._ensure_models_loaded()
         if self.tft_model is None:
+
             raise FileNotFoundError("TFT model not loaded.")
 
         data = df.copy()
