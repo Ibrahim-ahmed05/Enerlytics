@@ -329,8 +329,14 @@ class Forecaster:
         
         return float(max(0, total_predicted))
 
-# Global instance
-forecaster = Forecaster()
+# Lazy global instance helper
+_forecaster_instance = None
+def get_forecaster():
+    global _forecaster_instance
+    if _forecaster_instance is None:
+        _forecaster_instance = Forecaster()
+    return _forecaster_instance
+
 
 def predict(account_number, monthly_history):
     # 1. Transform Monthly to Hourly
@@ -340,8 +346,12 @@ def predict(account_number, monthly_history):
         if not ML_AVAILABLE:
             raise ImportError("Machine Learning libraries (tensorflow, torch) are not installed.")
             
+        # Get lazy forecaster
+        forecaster = get_forecaster()
+        
         # Run LSTM
         lstm_monthly_units = forecaster.run_lstm_forecast(hourly_df, steps=720)
+
         
         # Run TFT
         tft_monthly_units = forecaster.run_tft_forecast(hourly_df, steps=720)
