@@ -13,6 +13,13 @@ warnings.filterwarnings('ignore')
 # ML Imports (Will fail gracefully if not installed)
 try:
     import tensorflow as tf
+    # Fix for Keras 3 batch_shape error
+    from tensorflow.keras.layers import InputLayer as KerasInputLayer
+    class PatchedInputLayer(KerasInputLayer):
+        def __init__(self, *args, **kwargs):
+            kwargs.pop('batch_shape', None)
+            super().__init__(*args, **kwargs)
+
     import torch
     from pytorch_forecasting import TemporalFusionTransformer, TimeSeriesDataSet
     from pytorch_forecasting.data import GroupNormalizer
@@ -20,6 +27,7 @@ try:
     ML_AVAILABLE = True
 except ImportError:
     ML_AVAILABLE = False
+
 
 
 # =============================================================================
@@ -173,12 +181,19 @@ class Forecaster:
         # Load LSTM
         if all(os.path.exists(p) for p in [self.lstm_model_path, self.feat_scaler_path, self.tgt_scaler_path]):
             try:
-                self.lstm_model = tf.keras.models.load_model(self.lstm_model_path, compile=False)
+                # Use custom_objects to handle the batch_shape error in Keras 3
+                custom_objects = {'InputLayer': PatchedInputLayer}
+                self.lstm_model = tf.keras.models.load_model(
+                    self.lstm_model_path, 
+                    compile=False, 
+                    custom_objects=custom_objects
+                )
                 self.feature_scaler = joblib.load(self.feat_scaler_path)
                 self.target_scaler = joblib.load(self.tgt_scaler_path)
                 print("LSTM model and scalers loaded successfully.")
             except Exception as e:
                 print(f"Error loading LSTM model: {e}")
+
 
         # Load TFT
         if os.path.exists(self.tft_ckpt_path):
@@ -194,11 +209,13 @@ class Forecaster:
                     print("Patching TFT checkpoint...")
                     raw_ckpt = torch.load(self.tft_ckpt_path, map_location='cpu', weights_only=False)
                     hp = raw_ckpt.get('hyper_parameters', {})
-                    CONFLICTING_KEYS = {'monotone_constaints', 'monotone_constraints', 'log_gradient_flow'}
+                    # mask_bias is a legacy parameter that causes errors in newer versions
+                    CONFLICTING_KEYS = {'monotone_constaints', 'monotone_constraints', 'log_gradient_flow', 'mask_bias'}
                     for key in list(hp.keys()):
                         if key in CONFLICTING_KEYS:
                             hp.pop(key)
                     torch.save(raw_ckpt, self.tft_patched_path)
+
                 
                 self.tft_model = TemporalFusionTransformer.load_from_checkpoint(self.tft_patched_path, weights_only=False)
                 self.tft_model.eval()
