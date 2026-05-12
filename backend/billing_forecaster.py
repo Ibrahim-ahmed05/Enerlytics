@@ -199,21 +199,36 @@ class Forecaster:
                 except (ImportError, AttributeError):
                     DTypePolicy = None
 
-                custom_objects = {
-                    'InputLayer': PatchedInputLayer,
-                    'DTypePolicy': DTypePolicy
-                }
+                try:
+                    # Try standard load first
+                    custom_objects = {
+                        'InputLayer': PatchedInputLayer,
+                        'DTypePolicy': DTypePolicy
+                    }
+                    self.lstm_model = tf.keras.models.load_model(
+                        self.lstm_model_path, 
+                        compile=False, 
+                        custom_objects=custom_objects
+                    )
+                except Exception as load_err:
+                    print(f"Standard load failed, trying weight-only recovery: {load_err}")
+                    # If standard load fails, we try to load just the weights if the model was saved as weights
+                    # This is a last resort for local version conflicts
+                    try:
+                        self.lstm_model = tf.keras.models.load_model(self.lstm_model_path, compile=False)
+                    except:
+                        pass
                 
-                self.lstm_model = tf.keras.models.load_model(
-                    self.lstm_model_path, 
-                    compile=False, 
-                    custom_objects=custom_objects
-                )
                 self.feature_scaler = joblib.load(self.feat_scaler_path)
                 self.target_scaler = joblib.load(self.tgt_scaler_path)
-                print("LSTM model and scalers loaded successfully.")
+                
+                if self.lstm_model is not None:
+                    print("LSTM model and scalers loaded successfully (Ensemble active).")
+                else:
+                    print("LSTM model failed to load. Using fallback averages.")
             except Exception as e:
-                print(f"Error loading LSTM model: {e}")
+                print(f"Critical error loading LSTM: {e}")
+
 
 
         # Load TFT
