@@ -72,5 +72,9 @@ async def health_check():
     return {"status": "healthy"}
 
 if __name__ == "__main__":
-    # Run the server on port 8000
-    uvicorn.run(app, host="127.0.0.1", port=8000)
+    import os
+    # Render provides a PORT environment variable
+    port = int(os.environ.get("PORT", 8000))
+    # Must bind to 0.0.0.0 for external access on cloud platforms
+    uvicorn.run(app, host="0.0.0.0", port=port)
+
