@@ -364,8 +364,7 @@ export async function getBillData(accountNumber: string): Promise<PredictionResu
             prediction: {
                 nextMonthUnits: parseFloat(finalPrediction.toFixed(1)),
                 nextMonthPrice: Math.round(finalPrice),
-                isEnsemble: true,
-                status: "AI Optimized"
+                is_ensemble_model: true
             },
             accountFound: true
         };
