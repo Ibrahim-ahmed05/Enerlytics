@@ -27,9 +27,25 @@ export default function SuggestionsPage() {
     const [predictionData, setPredictionData] = useState<PredictionResult | null>(null)
     const [error, setError] = useState("")
 
-    const month = new Date().getMonth();
-    const isSummer = month >= 4 && month <= 8;
-    const isWinter = month >= 10 || month <= 1;
+    const [dateInfo, setDateInfo] = useState<{ month: number; isSummer: boolean; isWinter: boolean; dayOfMonth: number }>({
+        month: 0,
+        isSummer: false,
+        isWinter: false,
+        dayOfMonth: 1
+    })
+
+    useEffect(() => {
+        const now = new Date()
+        const m = now.getMonth()
+        setDateInfo({
+            month: m,
+            isSummer: m >= 4 && m <= 8,
+            isWinter: m >= 10 || m <= 1,
+            dayOfMonth: now.getDate()
+        })
+    }, [])
+
+    const { isSummer, isWinter, dayOfMonth } = dateInfo;
 
     const fetchAllData = useCallback(async () => {
         if (!accountNumber) return
@@ -123,19 +139,29 @@ export default function SuggestionsPage() {
                                                 You are projected to consume <span className="text-blue-600">{predictionData.prediction.nextMonthUnits} units</span> this month.
                                             </h2>
                                             <p className="text-slate-600">
-                                                Based on your current usage, you will likely fall into <span className="font-semibold">Slab {predictionData.prediction.nextMonthUnits > 300 ? '4 (300-700)' : '3 (200-300)'}</span>. 
+                                                Based on your current usage, you will likely fall into <span className="font-semibold">
+                                                    {predictionData.prediction.nextMonthUnits <= 100 ? 'Slab 1 (0-100)' :
+                                                     predictionData.prediction.nextMonthUnits <= 200 ? 'Slab 2 (100-200)' :
+                                                     predictionData.prediction.nextMonthUnits <= 300 ? 'Slab 3 (200-300)' :
+                                                     predictionData.prediction.nextMonthUnits <= 700 ? 'Slab 4 (300-700)' : 'Slab 5 (Above 700)'}
+                                                </span>. 
                                                 Follow the steps below to stay in a lower slab and save money.
                                             </p>
                                         </div>
                                         <div className="grid grid-cols-2 gap-4 w-full md:w-auto">
                                             <div className="bg-blue-50 p-4 rounded-xl border border-blue-100">
                                                 <p className="text-xs text-blue-600 font-medium mb-1 uppercase">Next Slab</p>
-                                                <p className="text-2xl font-bold text-blue-900">{predictionData.prediction.nextMonthUnits > 300 ? '700' : '300'}</p>
+                                                <p className="text-2xl font-bold text-blue-900">
+                                                    {predictionData.prediction.nextMonthUnits <= 100 ? '100' :
+                                                     predictionData.prediction.nextMonthUnits <= 200 ? '200' :
+                                                     predictionData.prediction.nextMonthUnits <= 300 ? '300' :
+                                                     predictionData.prediction.nextMonthUnits <= 700 ? '700' : '700+'}
+                                                </p>
                                                 <p className="text-xs text-blue-700/60 mt-1">Units Threshold</p>
                                             </div>
                                             <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-100">
                                                 <p className="text-xs text-emerald-600 font-medium mb-1 uppercase">Days Left</p>
-                                                <p className="text-2xl font-bold text-emerald-900">{Math.max(1, 30 - new Date().getDate())}</p>
+                                                <p className="text-2xl font-bold text-emerald-900">{Math.max(1, 30 - dayOfMonth)}</p>
                                                 <p className="text-xs text-emerald-700/60 mt-1">In Cycle</p>
                                             </div>
                                         </div>
@@ -269,12 +295,12 @@ export default function SuggestionsPage() {
                                             <div>
                                                 <div className="flex justify-between text-xs mb-1">
                                                     <span className="text-slate-500">Cycle Progress</span>
-                                                    <span className="font-medium text-slate-700">{new Date().getDate()}/30 Days</span>
+                                                    <span className="font-medium text-slate-700">{dayOfMonth}/30 Days</span>
                                                 </div>
                                                 <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
                                                     <div 
                                                         className="h-full bg-blue-500 rounded-full" 
-                                                        style={{ width: `${(new Date().getDate() / 30) * 100}%` }}
+                                                        style={{ width: `${(dayOfMonth / 30) * 100}%` }}
                                                     />
                                                 </div>
                                             </div>

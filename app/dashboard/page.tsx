@@ -74,7 +74,13 @@ export default function DashboardPage() {
         const totalPrice = history.reduce((s, h) => s + h.currentMonthPrice, 0)
         const avgUnits = Math.round(totalUnits / history.length)
         const avgPrice = Math.round(totalPrice / history.length)
-        const maxUnits = Math.max(...history.map(h => h.currentMonthUnits))
+        // Find peak usage and the month it occurred
+        const peakRecord = [...history].reduce((max, curr) => 
+            curr.currentMonthUnits > max.currentMonthUnits ? curr : max, history[0]
+        )
+        
+        const maxUnits = peakRecord.currentMonthUnits
+        const peakMonth = peakRecord.monthName
         const minUnits = Math.min(...history.map(h => h.currentMonthUnits))
 
         return {
@@ -83,6 +89,7 @@ export default function DashboardPage() {
             avgUnits,
             avgPrice,
             maxUnits,
+            peakMonth,
             minUnits,
             totalBills: history.length,
         }
@@ -211,9 +218,11 @@ export default function DashboardPage() {
                                                 </div>
                                             </div>
                                             <p className="text-2xl font-bold text-slate-900">
-                                                {stats.maxUnits.toLocaleString()}
+                                                {stats.maxUnits.toLocaleString()} <span className="text-sm font-normal text-slate-400">kWh</span>
                                             </p>
-                                            <p className="text-xs text-slate-400 mt-1">highest units in a month</p>
+                                            <p className="text-xs text-slate-400 mt-1">
+                                                Highest usage in {stats.peakMonth}
+                                            </p>
                                         </CardContent>
                                     </Card>
 

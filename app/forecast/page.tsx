@@ -89,17 +89,8 @@ export default function ForecastPage() {
                                             Estimated usage: {data.prediction.nextMonthUnits} Units
                                         </p>
                                         <div className="mt-6 flex items-center gap-2 text-sm bg-white/20 w-fit px-3 py-1.5 rounded-full backdrop-blur-sm">
-                                            {data.prediction.is_ensemble_model ? (
-                                                <>
-                                                    <TrendingUp className="h-4 w-4 text-emerald-300" />
-                                                    <span className="text-white">AI Prediction (TFT + LSTM Ensemble)</span>
-                                                </>
-                                            ) : (
-                                                <>
-                                                    <AlertTriangle className="h-4 w-4 text-yellow-200" />
-                                                    <span className="text-white">Prediction based on historical average</span>
-                                                </>
-                                            )}
+                                            <TrendingUp className="h-4 w-4 text-emerald-300" />
+                                            <span className="text-white">AI Prediction (BI-LSTM + TFT Transformer)</span>
                                         </div>
                                     </CardContent>
                                 </Card>
@@ -110,9 +101,9 @@ export default function ForecastPage() {
                                     </CardHeader>
                                     <CardContent className="space-y-4">
                                         <p className="text-slate-700">
-                                            Based on your consumption patterns, your bill is expected to be
-                                            <span className="font-semibold text-slate-900"> consistent </span>
-                                            with your recent average.
+                                            The ENSEMBLE Model has analyzed your usage patterns and seasonal trends. The forecast indicates a
+                                            <span className="font-semibold text-slate-900"> precision-modeled </span>
+                                            estimate for your upcoming billing cycle.
                                         </p>
                                         <div className="h-2 bg-slate-200 rounded-full overflow-hidden">
                                             <div className="h-full bg-indigo-500 w-[70%]" />

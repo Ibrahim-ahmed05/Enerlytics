@@ -252,7 +252,7 @@ export default function LandingPage() {
           </div>
           <div className="flex items-center gap-6">
             <Link href="/about" className="text-sm text-slate-400 hover:text-slate-600 transition-colors">About</Link>
-            <p className="text-sm text-slate-400">
+            <p className="text-sm text-slate-400" suppressHydrationWarning>
               © {new Date().getFullYear()} Enerlytics. Built for KE consumers in Pakistan.
             </p>
           </div>

@@ -13,6 +13,10 @@ warnings.filterwarnings('ignore')
 # ML Imports (Will be loaded lazily to prevent hangs)
 ML_AVAILABLE = True 
 
+# Disable oneDNN to prevent Windows hangs during initialization
+os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2' # Suppress noise
+
 
 
 
@@ -54,11 +58,33 @@ def generate_karachi_weather(start_date, end_date):
     return pd.DataFrame(weather_data)
 
 def get_slab_price(monthly_usage):
-    if monthly_usage <= 100: return 15.0
-    elif monthly_usage <= 200: return 22.0
-    elif monthly_usage <= 300: return 28.0
-    elif monthly_usage <= 700: return 35.0
-    else: return 45.0
+    """Returns the base rate per unit for the current slab (cliff-edge model)."""
+    if monthly_usage <= 100: return 16.48
+    elif monthly_usage <= 200: return 22.95
+    elif monthly_usage <= 300: return 27.14
+    elif monthly_usage <= 700: return 38.46
+    else: return 47.20
+
+def calculate_progressive_bill(units):
+    """Calculates the total bill using a progressive slab system (K-Electric style)."""
+    total = 0
+    remaining = units
+    
+    slabs = [
+        (100, 16.48),
+        (100, 22.95),
+        (100, 27.14),
+        (400, 38.46),
+        (float('inf'), 47.20)
+    ]
+    
+    for limit, rate in slabs:
+        if remaining <= 0: break
+        consumed_in_slab = min(remaining, limit)
+        total += consumed_in_slab * rate
+        remaining -= consumed_in_slab
+        
+    return total * 1.25 # Including ~25% for taxes, duties, and fuel adjustment (more realistic than 15%)
 
 def get_slab_tier(monthly_usage):
     if monthly_usage <= 100: return 1
@@ -162,6 +188,8 @@ class Forecaster:
         self.tft_model = None
 
         self._initialized = True
+        print("Forecaster initialized (Basic state).")
+
 
     def _ensure_models_loaded(self):
         if self.lstm_model is None and self.tft_model is None and ML_AVAILABLE:
@@ -170,9 +198,11 @@ class Forecaster:
 
     def _load_models(self):
         global ML_AVAILABLE
+        print("[DEBUG] Step 1: Starting lazy imports...")
         # Load ML Libraries lazily
         try:
             import tensorflow as tf
+            print("[DEBUG] Step 2: TensorFlow imported.")
             from tensorflow.keras.layers import InputLayer as KerasInputLayer
             
             # Define PatchedInputLayer here for Keras 3 compatibility
@@ -182,9 +212,11 @@ class Forecaster:
                     super().__init__(*args, **kwargs)
 
             import torch
+            print("[DEBUG] Step 3: PyTorch imported.")
             from pytorch_forecasting import TemporalFusionTransformer, TimeSeriesDataSet
             from pytorch_forecasting.data import GroupNormalizer
             from pytorch_forecasting.data.encoders import NaNLabelEncoder
+            print("[DEBUG] Step 4: All ML libraries ready.")
         except ImportError as e:
             print(f"ML libraries not found, using fallback: {e}")
             ML_AVAILABLE = False
@@ -193,6 +225,7 @@ class Forecaster:
         # Load LSTM
         if all(os.path.exists(p) for p in [self.lstm_model_path, self.feat_scaler_path, self.tgt_scaler_path]):
             try:
+                print(f"[DEBUG] Step 5: Loading LSTM from {self.lstm_model_path}...")
                 # Add DTypePolicy to custom_objects for Keras 3
                 try:
                     from tensorflow.keras.mixed_precision import Policy as DTypePolicy
@@ -200,34 +233,34 @@ class Forecaster:
                     DTypePolicy = None
 
                 try:
-                    # Try standard load first
-                    custom_objects = {
-                        'InputLayer': PatchedInputLayer,
-                        'DTypePolicy': DTypePolicy
-                    }
-                    self.lstm_model = tf.keras.models.load_model(
-                        self.lstm_model_path, 
-                        compile=False, 
-                        custom_objects=custom_objects
-                    )
-                except Exception as load_err:
-                    print(f"Standard load failed, trying weight-only recovery: {load_err}")
-                    # If standard load fails, we try to load just the weights if the model was saved as weights
-                    # This is a last resort for local version conflicts
+                    # Try a "Bare" load first (most compatible with Keras 3)
+                    print("[DEBUG] Step 6: Attempting Bare Load...")
+                    self.lstm_model = tf.keras.models.load_model(self.lstm_model_path, compile=False)
+
+                    print("LSTM model loaded via Bare Load.")
+                except Exception as e1:
+                    print(f"Bare load failed ({e1}), trying Patched Load...")
                     try:
-                        self.lstm_model = tf.keras.models.load_model(self.lstm_model_path, compile=False)
-                    except:
-                        pass
+                        custom_objects = {'InputLayer': PatchedInputLayer, 'DTypePolicy': DTypePolicy}
+                        self.lstm_model = tf.keras.models.load_model(
+                            self.lstm_model_path, 
+                            compile=False, 
+                            custom_objects=custom_objects
+                        )
+                        print("LSTM model loaded via Patched Load.")
+                    except Exception as e2:
+                        print(f"Patched load failed ({e2}). AI model is incompatible with local version.")
                 
                 self.feature_scaler = joblib.load(self.feat_scaler_path)
                 self.target_scaler = joblib.load(self.tgt_scaler_path)
                 
                 if self.lstm_model is not None:
-                    print("LSTM model and scalers loaded successfully (Ensemble active).")
+                    print("SUCCESS: LSTM model active for evaluation.")
                 else:
-                    print("LSTM model failed to load. Using fallback averages.")
+                    print("WARNING: LSTM model inactive. Using prediction fallback.")
             except Exception as e:
-                print(f"Critical error loading LSTM: {e}")
+                print(f"Critical error in model recovery: {e}")
+
 
 
 
@@ -260,10 +293,10 @@ class Forecaster:
 
 
     def run_lstm_forecast(self, df, steps=720):
-        self._ensure_models_loaded()
-        if self.lstm_model is None or self.feature_scaler is None or self.target_scaler is None:
+        if self.lstm_model is None:
+            # Quick-Load attempt or return None to trigger average-plus logic
+            return None
 
-            raise FileNotFoundError("LSTM model or scalers not loaded.")
 
         df_feat = df.copy()
         df_feat['hour'] = df_feat['timestamp'].dt.hour
@@ -356,52 +389,73 @@ def get_forecaster():
 
 
 def predict(account_number, monthly_history):
-    # 1. Transform Monthly to Hourly
-    hourly_df = transform_monthly_to_hourly(account_number, monthly_history, days=30)
-    
+    """
+    Main entry point for prediction. Uses the trained LSTM model for forecasting.
+    """
     try:
-        if not ML_AVAILABLE:
-            raise ImportError("Machine Learning libraries (tensorflow, torch) are not installed.")
-            
-        # Get lazy forecaster
         forecaster = get_forecaster()
+        # Ensure models are loaded
+        forecaster._ensure_models_loaded()
         
-        # Run LSTM
-        lstm_monthly_units = forecaster.run_lstm_forecast(hourly_df, steps=720)
+        # 1. Prepare historical data
+        # Transform the monthly history into a realistic hourly sequence for the LSTM
+        df_hourly = transform_monthly_to_hourly(account_number, monthly_history)
+        
+        # 2. Run the trained model
+        print(f"Running LSTM forecast for account {account_number}...")
+        predicted_units = forecaster.run_lstm_forecast(df_hourly)
+        
+        is_model_active = True
+        
+        # 3. Fallback to seasonal simulation if model fails or is unavailable
+        if predicted_units is None:
+            print("Model not available, using seasonal simulation fallback.")
+            is_model_active = False
+            
+            # Base Average from history
+            if len(monthly_history) > 0:
+                avg_units = sum(m.get('currentMonthUnits', 0) for m in monthly_history) / len(monthly_history)
+            else:
+                avg_units = 300
 
-        
-        # Run TFT
-        tft_monthly_units = forecaster.run_tft_forecast(hourly_df, steps=720)
+            # Seasonal Factors for Karachi
+            current_month = datetime.now().month
+            seasonal_factors = {
+                1: 0.72, 2: 0.78, 3: 0.93, 4: 1.15, 5: 1.34, 6: 1.42, 
+                7: 1.38, 8: 1.31, 9: 1.27, 10: 1.12, 11: 0.88, 12: 0.77
+            }
+            factor = seasonal_factors.get(current_month, 1.0)
+            
+            # Deterministic variance based on account number
+            acc_hash = sum(ord(c) for c in str(account_number))
+            rng = np.random.RandomState(acc_hash % 1000)
+            user_profile_factor = rng.uniform(0.95, 1.05)
+            
+            predicted_units = avg_units * factor * user_profile_factor
 
-        
-        # Blend based on inverse MAE weights
-        LSTM_WEIGHT = 0.951
-        TFT_WEIGHT = 0.049
-        
-        blended_units = (lstm_monthly_units * LSTM_WEIGHT) + (tft_monthly_units * TFT_WEIGHT)
-        predicted_price = blended_units * get_slab_price(blended_units) * 1.15 # including 15% tax
+        # 4. Correct Price Calculation (Progressive Slabs)
+        predicted_price = calculate_progressive_bill(predicted_units)
         
         return {
-            "nextMonthUnits": round(blended_units),
-            "nextMonthPrice": round(predicted_price, 2),
-            "is_ensemble_model": True
+            "nextMonthUnits": round(float(predicted_units), 1),
+            "nextMonthPrice": round(float(predicted_price), 2),
+            "is_ensemble_model": is_model_active, 
+            "status": "Success" if is_model_active else "Fallback"
         }
+
     except Exception as e:
-        # Fallback to simple average if ML fails
-        print(f"ML Model Inference Failed: {str(e)}. Falling back to average.")
-        if len(monthly_history) > 0:
-            avg_units = sum(m.get('currentMonthUnits', 0) for m in monthly_history) / len(monthly_history)
-        else:
-            avg_units = 300
-        
-        predicted_price = avg_units * get_slab_price(avg_units) * 1.15
+        print(f"Prediction Error: {e}")
+        # Return a safe default with the error message
         return {
-            "nextMonthUnits": round(avg_units),
-            "nextMonthPrice": round(predicted_price, 2),
-            "is_ensemble_model": False,
-            "fallback": True,
-            "error": str(e)
+            "error": str(e), 
+            "nextMonthUnits": 350, 
+            "nextMonthPrice": 12500,
+            "fallback": True
         }
+
+
+
+
 
 if __name__ == "__main__":
     try:

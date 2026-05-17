@@ -24,7 +24,12 @@ app.add_middleware(
 @app.on_event("startup")
 async def startup_event():
     logger.info("Starting Electricity ML Backend...")
-    logger.info("ML Models are being pre-loaded via billing_forecaster import.")
+    # Pre-load models in a background thread to prevent blocking startup
+    import threading
+    from billing_forecaster import get_forecaster
+    threading.Thread(target=get_forecaster, daemon=True).start()
+    logger.info("ML Models are being pre-loaded in the background.")
+
 
 @app.post("/recommend")
 async def get_recommendations(request: Request):
